@@ -1,4 +1,4 @@
-name: TalentPulse CI/CD
+name: TalentPulse CI
 
 on:
   push:
@@ -8,34 +8,25 @@ on:
     branches:
       - main
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 jobs:
-  build-and-deploy:
+  validate:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Validate project files
+      - name: Validate frontend files
         run: |
           test -f index.html
           test -f style.css
           test -f app.js
-          echo "All required frontend files are present."
+          echo "All required TalentPulse frontend files are present."
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+      - name: Validate JavaScript
+        run: |
+          node --check app.js
+          echo "JavaScript syntax validation successful."
 
-      - name: Upload website artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Build validation successful
+        run: echo "TalentPulse AI CI pipeline completed successfully."
