@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TalentPulse AI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">✦</div>
+      <div><h2>TalentPulse</h2><span>AI RECRUITMENT CLOUD</span></div>
+    </div>
+
+    <nav>
+      <div class="nav-section">COMMAND</div>
+      <a class="nav-item active" href="#command"><span>⌂</span>Command Center</a>
+      <a class="nav-item" href="#job"><span>◈</span>Job Intelligence</a>
+      <a class="nav-item" href="#resume"><span>⇧</span>Resume Intake</a>
+
+      <div class="nav-section">TALENT AI</div>
+      <a class="nav-item" href="#candidates"><span>◎</span>Candidate Radar</a>
+      <a class="nav-item" href="#skills"><span>◇</span>Skill Matrix</a>
+      <a class="nav-item" href="#analysis"><span>✦</span>AI Match Analysis</a>
+      <a class="nav-item" href="#pipeline"><span>▣</span>Hiring Pipeline</a>
+
+      <div class="nav-section">CLOUD & DEVOPS</div>
+      <a class="nav-item" href="#workflow"><span>☁</span>Cloud Workflow</a>
+      <a class="nav-item" href="#devops"><span>⚡</span>DevOps Pulse</a>
+      <a class="nav-item" href="#health"><span>◉</span>Cloud Health</a>
+
+      <div class="nav-section">SECURITY</div>
+      <a class="nav-item" href="#security"><span>⌾</span>Security Center</a>
+      <a class="nav-item" href="#audit"><span>≡</span>Audit Trail</a>
+    </nav>
+
+    <div class="system-status">
+      <div class="status-dot"></div>
+      <div><strong>Cloud System</strong><small>All systems operational</small></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar" id="command">
+      <div>
+        <div class="breadcrumb">TALENTPULSE AI / COMMAND CENTER</div>
+        <h1>Recruitment Intelligence Center</h1>
+        <p>AI-powered talent discovery and cloud-native hiring pipeline</p>
+      </div>
+      <div class="top-actions">
+        <button class="small-button" id="signInBtn">Sign In</button>
+        <button class="icon-button" id="refreshBtn" title="Refresh">↻</button>
+        <div class="recruiter"><div class="avatar">BU</div><div><strong>Recruiter</strong><small>Administrator</small></div></div>
+      </div>
+    </header>
+
+    <section class="intake panel" id="resume">
+      <div class="panel-heading">
+        <div>
+          <span class="eyebrow">LIVE RESUME INTAKE</span>
+          <h2>Upload & Screen Candidate</h2>
+          <p>Select a text-based PDF. The browser extracts its text and sends it to the TalentPulse matching engine.</p>
+        </div>
+        <label class="upload-button">
+          <input id="resumeFile" type="file" accept=".pdf,application/pdf">
+          <span>⇧ Choose PDF Resume</span>
+        </label>
+      </div>
+      <div id="uploadStatus" class="status-message">Ready for a resume.</div>
+      <div id="resultCard" class="result-card hidden">
+        <div><span>Candidate</span><strong id="resultName">—</strong></div>
+        <div><span>Match Score</span><strong id="resultScore">—</strong></div>
+        <div><span>AI Decision</span><strong id="resultClass">—</strong></div>
+        <div><span>Status</span><strong id="resultStatus">—</strong></div>
+        <div class="skills-result"><span>Matched Skills</span><div id="matchedSkills"></div></div>
+        <div class="skills-result"><span>Missing Skills</span><div id="missingSkills"></div></div>
+      </div>
+    </section>
+
+    <section class="stats-grid">
+      <div class="stat-card"><span>Total Candidates</span><strong id="statCandidates">0</strong><small>Live from DynamoDB</small></div>
+      <div class="stat-card"><span>AI Processed</span><strong id="statProcessed">0</strong><small>Successfully analyzed</small></div>
+      <div class="stat-card"><span>Strong+ Matches</span><strong id="statStrong">0</strong><small>Score ≥ 80%</small></div>
+      <div class="stat-card"><span>Top Score</span><strong id="statTop">0%</strong><small>Current candidate leader</small></div>
+    </section>
+
+    <section class="two-col" id="job">
+      <div class="panel">
+        <div class="panel-heading compact"><div><span class="eyebrow">JOB INTELLIGENCE</span><h2>Cloud Software Engineer</h2></div><span class="live-pill">● ACTIVE</span></div>
+        <div class="job-skills">
+          <span>AWS</span><span>Cloud Computing</span><span>Python</span><span>Java</span>
+          <span>SQL</span><span>Docker</span><span>Git</span><span>Machine Learning</span>
+        </div>
+        <div class="job-footer"><span>Required skills: <b>8</b></span><span>Matching engine: <b>ACTIVE</b></span></div>
+      </div>
+
+      <div class="panel" id="analysis">
+        <div class="panel-heading compact"><div><span class="eyebrow">AI MATCH ANALYSIS</span><h2>Scoring Engine</h2></div></div>
+        <div class="score-rules">
+          <div><span class="dot excellent"></span><b>90–100%</b><span>Excellent Match</span></div>
+          <div><span class="dot strong"></span><b>80–89%</b><span>Strong Match</span></div>
+          <div><span class="dot good"></span><b>70–79%</b><span>Good Match</span></div>
+          <div><span class="dot moderate"></span><b>60–69%</b><span>Moderate Match</span></div>
+          <div><span class="dot low"></span><b>&lt;60%</b><span>Low Match</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="candidates">
+      <div class="panel-heading compact">
+        <div><span class="eyebrow">CANDIDATE RADAR</span><h2>Live Candidate Ranking</h2></div>
+        <button class="outline-button" id="refreshCandidates">↻ Refresh Candidates</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Rank</th><th>Candidate</th><th>Skills</th><th>Score</th><th>AI Decision</th><th>Status</th></tr></thead>
+          <tbody id="candidateTable"><tr><td colspan="6" class="empty">Loading candidates from AWS...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="two-col" id="skills">
+      <div class="panel">
+        <div class="panel-heading compact"><div><span class="eyebrow">SKILL MATRIX</span><h2>Required Skill Coverage</h2></div></div>
+        <div id="skillMatrix" class="skill-matrix"></div>
+      </div>
+      <div class="panel" id="pipeline">
+        <div class="panel-heading compact"><div><span class="eyebrow">HIRING PIPELINE</span><h2>Candidate Distribution</h2></div></div>
+        <div class="pipeline" id="pipelineStats"></div>
+      </div>
+    </section>
+
+    <section class="panel workflow" id="workflow">
+      <div class="panel-heading compact"><div><span class="eyebrow">CLOUD WORKFLOW</span><h2>Resume Processing Pipeline</h2></div><span class="live-pill">LIVE ARCHITECTURE</span></div>
+      <div class="flow">
+        <div class="flow-node"><b>S3</b><span>Resume Storage</span></div><i>→</i>
+        <div class="flow-node"><b>EventBridge</b><span>Event Routing</span></div><i>→</i>
+        <div class="flow-node"><b>Step Functions</b><span>Orchestration</span></div><i>→</i>
+        <div class="flow-node"><b>Lambda</b><span>AI Matching</span></div><i>→</i>
+        <div class="flow-node"><b>DynamoDB</b><span>Candidate Data</span></div>
+      </div>
+      <div class="workflow-note">Textract integration is reserved for the next AWS-enabled extraction stage. Current demo uses browser PDF text extraction + Lambda matching.</div>
+    </section>
+
+    <section class="two-col" id="devops">
+      <div class="panel">
+        <div class="panel-heading compact"><div><span class="eyebrow">AGILE + DEVOPS</span><h2>DevOps Pulse</h2></div><span class="live-pill">● BUILD READY</span></div>
+        <div class="devops-flow">
+          <div class="dev-step done"><b>GH</b><span>GitHub</span></div><div>→</div>
+          <div class="dev-step done"><b>PR</b><span>Review</span></div><div>→</div>
+          <div class="dev-step done"><b>✓</b><span>Tests</span></div><div>→</div>
+          <div class="dev-step active"><b>CD</b><span>Deploy</span></div>
+        </div>
+      </div>
+      <div class="panel" id="health">
+        <div class="panel-heading compact"><div><span class="eyebrow">CLOUD HEALTH</span><h2>Service Status</h2></div></div>
+        <div class="health-list">
+          <div><span>S3</span><b>Operational</b></div><div><span>Lambda</span><b>Operational</b></div>
+          <div><span>DynamoDB</span><b>Operational</b></div><div><span>API Gateway</span><b>Operational</b></div>
+          <div><span>Step Functions</span><b>Configured</b></div><div><span>EventBridge</span><b>Configured</b></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="two-col" id="security">
+      <div class="panel"><div class="panel-heading compact"><div><span class="eyebrow">SECURITY CENTER</span><h2>Security Controls</h2></div></div>
+        <div class="security-grid"><span>✓ S3 encryption</span><span>✓ Block Public Access</span><span>✓ IAM role</span><span>✓ Cognito</span><span>✓ HTTPS API</span><span>✓ Versioning</span></div>
+      </div>
+      <div class="panel" id="audit"><div class="panel-heading compact"><div><span class="eyebrow">AUDIT TRAIL</span><h2>Recent Activity</h2></div></div>
+        <div id="auditLog" class="audit-log"><div>System initialized</div><div>Candidate API connected</div><div>Matching engine ready</div></div>
+      </div>
+    </section>
+
+    <footer><span>TalentPulse AI · Cloud-Native Recruitment Intelligence</span><span>AWS Infrastructure · Secure · Observable</span></footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
