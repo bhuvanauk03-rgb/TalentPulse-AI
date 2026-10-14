@@ -122,7 +122,7 @@ function renderCandidates(candidates) {
         </td>
         <td>
           <span class="badge ${
-            candidate.status === "AI_PROCESSED" ? "excellent" : "moderate"
+            candidate.status === "AUTOMATED_PROCESSED" ? "excellent" : "moderate"
           }">
             ${escapeHtml(candidate.status || "RECEIVED")}
           </span>
