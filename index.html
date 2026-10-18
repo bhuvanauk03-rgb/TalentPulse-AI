@@ -91,36 +91,12 @@
         </label>
       </div>
 
-      <div id="uploadStatus" class="status-message" role="status" aria-live="polite">
-        Ready for resumes. Select multiple PDF files to begin bulk processing.
+      <div id="uploadStatus" class="status-message"
+           role="status" aria-live="polite">
+        Ready for resumes. Select multiple PDFs to begin.
       </div>
 
-      <div id="resultCard" class="result-card hidden">
-        <div>
-          <span>Candidate</span>
-          <strong id="resultName">—</strong>
-        </div>
-        <div>
-          <span>Match Score</span>
-          <strong id="resultScore">—</strong>
-        </div>
-        <div>
-          <span>AI Decision</span>
-          <strong id="resultClass">—</strong>
-        </div>
-        <div>
-          <span>Status</span>
-          <strong id="resultStatus">—</strong>
-        </div>
-        <div class="skills-result">
-          <span>Matched Skills</span>
-          <div id="matchedSkills"></div>
-        </div>
-        <div class="skills-result">
-          <span>Missing Skills</span>
-          <div id="missingSkills"></div>
-        </div>
-      </div>
+      <div id="bulkResults" class="bulk-results"></div>
     </section>
 
     <section class="stats-grid">
@@ -267,8 +243,8 @@
       </div>
 
       <div class="workflow-note">
-        Textract integration is reserved for the next AWS-enabled extraction stage.
-        Current demo uses browser PDF text extraction + Lambda matching.
+        Textract integration is reserved for the next AWS-enabled extraction
+        stage. Current demo uses browser PDF text extraction + Lambda matching.
       </div>
     </section>
 
