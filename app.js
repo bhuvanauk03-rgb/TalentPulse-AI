@@ -26,11 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("refreshBtn").onclick = loadCandidates;
   document.getElementById("refreshCandidates").onclick = loadCandidates;
-
-  document.getElementById("resumeFile").addEventListener(
-    "change",
-    handleResume
-  );
+  document.getElementById("resumeFile").addEventListener("change", handleResume);
 
   setupNav();
   loadCandidates();
@@ -42,7 +38,6 @@ function setupNav() {
       document.querySelectorAll(".nav-item").forEach(item => {
         item.classList.remove("active");
       });
-
       link.classList.add("active");
     });
   });
@@ -53,19 +48,13 @@ async function loadCandidates() {
 
   try {
     const response = await fetch(API_URL);
-
-    if (!response.ok) {
-      throw new Error(`API returned ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`API returned ${response.status}`);
 
     const raw = await response.json();
-    const candidates = Array.isArray(raw)
-      ? raw
-      : (raw.candidates || []);
+    const candidates = Array.isArray(raw) ? raw : (raw.candidates || []);
 
     candidates.sort(
-      (a, b) =>
-        Number(b.matchScore || 0) - Number(a.matchScore || 0)
+      (a, b) => Number(b.matchScore || 0) - Number(a.matchScore || 0)
     );
 
     renderCandidates(candidates);
@@ -73,23 +62,17 @@ async function loadCandidates() {
     renderSkills(candidates);
     renderPipeline(candidates);
 
-    addAudit(
-      `AWS candidate data refreshed · ${candidates.length} records`
-    );
+    addAudit(`AWS candidate data refreshed · ${candidates.length} records`);
   } catch (error) {
     console.error("Unable to load candidates:", error);
-
     table.innerHTML =
       '<tr><td colspan="6" class="empty">Unable to load AWS candidates. Check API Gateway.</td></tr>';
-
     addAudit("Candidate API connection failed");
   }
 }
 
 function normalizeSkills(value) {
-  if (Array.isArray(value)) {
-    return value;
-  }
+  if (Array.isArray(value)) return value;
 
   if (typeof value === "string") {
     return value.split(",").map(skill => skill.trim()).filter(Boolean);
@@ -109,46 +92,30 @@ function renderCandidates(candidates) {
 
   table.innerHTML = candidates.map((candidate, index) => {
     const score = Number(candidate.matchScore || 0);
-    const decision =
-      candidate.classification || classification(score);
+    const decision = candidate.classification || classification(score);
+    const status = candidate.status || "RECEIVED";
 
     const skills = normalizeSkills(
       candidate.matchedSkills ?? candidate.skills
-    )
-      .slice(0, 4)
-      .map(skill =>
-        `<span class="skill-chip">${escapeHtml(skill)}</span>`
-      )
-      .join("");
-
-    const status = candidate.status || "RECEIVED";
+    ).slice(0, 4).map(skill =>
+      `<span class="skill-chip">${escapeHtml(skill)}</span>`
+    ).join("");
 
     return `
       <tr>
         <td>#${index + 1}</td>
         <td>
-          <span class="candidate-name">
-            ${escapeHtml(candidate.candidateName || "Candidate")}
-          </span>
-          <br>
-          <small>${escapeHtml(candidate.email || "")}</small>
+          <span class="candidate-name">${escapeHtml(candidate.candidateName || "Candidate")}</span>
+          <br><small>${escapeHtml(candidate.email || "")}</small>
         </td>
         <td>${skills || "—"}</td>
         <td class="score">${score}%</td>
-        <td>
-          <span class="badge ${badgeClass(decision)}">
-            ${escapeHtml(decision)}
-          </span>
-        </td>
+        <td><span class="badge ${badgeClass(decision)}">${escapeHtml(decision)}</span></td>
         <td>
           <span class="badge ${
-            status === "AI_PROCESSED" ||
-            status === "AUTOMATED_PROCESSED"
-              ? "excellent"
-              : "moderate"
-          }">
-            ${escapeHtml(status)}
-          </span>
+            status === "AI_PROCESSED" || status === "AUTOMATED_PROCESSED"
+              ? "excellent" : "moderate"
+          }">${escapeHtml(status)}</span>
         </td>
       </tr>
     `;
@@ -156,28 +123,20 @@ function renderCandidates(candidates) {
 }
 
 function renderStats(candidates) {
-  document.getElementById("statCandidates").textContent =
-    candidates.length;
+  document.getElementById("statCandidates").textContent = candidates.length;
 
   document.getElementById("statProcessed").textContent =
-    candidates.filter(candidate =>
-      candidate.status === "AI_PROCESSED" ||
-      candidate.status === "AUTOMATED_PROCESSED"
+    candidates.filter(c =>
+      c.status === "AI_PROCESSED" ||
+      c.status === "AUTOMATED_PROCESSED"
     ).length;
 
   document.getElementById("statStrong").textContent =
-    candidates.filter(
-      candidate => Number(candidate.matchScore || 0) >= 80
-    ).length;
+    candidates.filter(c => Number(c.matchScore || 0) >= 80).length;
 
-  document.getElementById("statTop").textContent =
-    candidates.length
-      ? Math.max(
-          ...candidates.map(candidate =>
-            Number(candidate.matchScore || 0)
-          )
-        ) + "%"
-      : "0%";
+  document.getElementById("statTop").textContent = candidates.length
+    ? Math.max(...candidates.map(c => Number(c.matchScore || 0))) + "%"
+    : "0%";
 }
 
 function renderSkills(candidates) {
@@ -188,22 +147,19 @@ function renderSkills(candidates) {
       const skills = normalizeSkills(
         candidate.matchedSkills ?? candidate.skills
       );
-
       return skills.some(item =>
         item.toLowerCase().includes(skill.toLowerCase())
       );
     }).length;
 
     const percentage = candidates.length
-      ? Math.round((count / candidates.length) * 100)
+      ? Math.round(count / candidates.length * 100)
       : 0;
 
     return `
       <div class="skill-row">
         <span>${escapeHtml(skill)}</span>
-        <div class="bar">
-          <i style="width:${percentage}%"></i>
-        </div>
+        <div class="bar"><i style="width:${percentage}%"></i></div>
         <b>${percentage}%</b>
       </div>
     `;
@@ -221,7 +177,6 @@ function renderPipeline(candidates) {
 
   candidates.forEach(candidate => {
     const score = Number(candidate.matchScore || 0);
-
     if (score >= 90) counts.Excellent++;
     else if (score >= 80) counts.Strong++;
     else if (score >= 70) counts.Good++;
@@ -231,14 +186,10 @@ function renderPipeline(candidates) {
 
   document.getElementById("pipelineStats").innerHTML =
     Object.entries(counts).map(([name, count]) => `
-      <div class="pipeline-row">
-        <span>${name} Match</span>
-        <b>${count}</b>
-      </div>
+      <div class="pipeline-row"><span>${name} Match</span><b>${count}</b></div>
     `).join("");
 }
 
-// Extract selectable text from a PDF and determine candidate details.
 async function extractResume(file, pdfjs) {
   const pdf = await pdfjs.getDocument({
     data: await file.arrayBuffer()
@@ -249,18 +200,13 @@ async function extractResume(file, pdfjs) {
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
     const page = await pdf.getPage(pageNumber);
     const content = await page.getTextContent();
-
-    pageTexts.push(
-      content.items.map(item => item.str || "").join(" ")
-    );
+    pageTexts.push(content.items.map(item => item.str || "").join(" "));
   }
 
   const resumeText = pageTexts.join("\n").trim();
 
   if (!resumeText) {
-    throw new Error(
-      "No selectable text found. This PDF may be scanned and need OCR."
-    );
+    throw new Error("No selectable text found. This PDF may be scanned and need OCR.");
   }
 
   const emailMatch = resumeText.match(
@@ -316,12 +262,10 @@ async function extractResume(file, pdfjs) {
     candidateName,
     email: emailMatch
       ? emailMatch[0]
-      : `no-email-${Date.now()}-${Math.random()
-          .toString(36).slice(2, 8)}@talentpulse.invalid`
+      : `no-email-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@talentpulse.invalid`
   };
 }
 
-// Process selected PDFs sequentially and retain every successful result.
 async function handleResume(event) {
   if (isProcessing) return;
 
@@ -353,11 +297,11 @@ async function handleResume(event) {
   let succeeded = 0;
   const failures = [];
 
-  container.innerHTML = "";
+  // Remove the previous batch's cards only when a new batch starts.
+  container.replaceChildren();
 
   try {
-    status.textContent =
-      `Loading PDF reader for ${files.length} resume(s)...`;
+    status.textContent = `Loading PDF reader for ${files.length} resumes...`;
 
     const pdfjs = await import(
       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs"
@@ -370,7 +314,7 @@ async function handleResume(event) {
       const file = files[index];
 
       status.textContent =
-        `Processing ${index + 1} of ${files.length}: ${file.name} · ` +
+        `Processing ${index + 1}/${files.length}: ${file.name} · ` +
         `${succeeded} succeeded · ${failures.length} failed`;
 
       try {
@@ -378,9 +322,7 @@ async function handleResume(event) {
 
         const response = await fetch(API_URL, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             candidateName: resume.candidateName,
             email: resume.email,
@@ -405,40 +347,38 @@ async function handleResume(event) {
           result = raw.body;
         }
 
+        // A NEW card is appended for every successfully processed resume.
         appendBulkResult(result, resume.candidateName, file.name);
         succeeded++;
 
         addAudit(
-          `Resume processed · ${
-            result.candidateName || resume.candidateName
-          } · ${result.matchScore ?? 0}%`
+          `Resume processed · ${result.candidateName || resume.candidateName} · ${result.matchScore ?? 0}%`
         );
       } catch (error) {
         console.error(`Failed to process ${file.name}:`, error);
         failures.push(file.name);
-
         appendFailedResult(file.name, error.message);
         addAudit(`Resume failed · ${file.name}`);
       }
+
+      status.textContent =
+        `Progress: ${index + 1}/${files.length} attempted · ` +
+        `${succeeded} succeeded · ${failures.length} failed`;
     }
 
-    // Reload AWS data after all resumes have been attempted.
     await loadCandidates();
 
     status.textContent = failures.length === 0
       ? `✓ Completed: ${succeeded}/${files.length} resumes processed successfully.`
-      : `Completed: ${succeeded} succeeded, ${failures.length} failed. Check the failed cards below.`;
+      : `Completed: ${succeeded} succeeded, ${failures.length} failed. See the result cards below.`;
 
     addAudit(
       `Bulk processing completed · ${succeeded} succeeded · ${failures.length} failed`
     );
   } catch (error) {
     console.error("PDF reader initialization failed:", error);
-
     status.textContent =
       "Unable to load the PDF reader. Check your internet connection.";
-
-    addAudit("PDF extraction engine failed to load");
   } finally {
     isProcessing = false;
     fileInput.disabled = false;
@@ -447,105 +387,101 @@ async function handleResume(event) {
   }
 }
 
-// Append a new card instead of replacing the previous candidate.
 function appendBulkResult(result, fallbackName, fileName) {
   const container = document.getElementById("bulkResults");
 
   const score = Number(result.matchScore ?? 0);
-  const decision =
-    result.classification || classification(score);
-
-  const matched = normalizeSkills(
-    result.matchedSkills ?? result.skills
-  );
-
+  const decision = result.classification || classification(score);
+  const matched = normalizeSkills(result.matchedSkills ?? result.skills);
   const missing = normalizeSkills(result.missingSkills);
 
   const card = document.createElement("article");
-  card.className = "result-card bulk-result-card";
-
-  card.innerHTML = `
-    <div class="bulk-result-heading">
-      <span class="eyebrow">CANDIDATE RESULT</span>
-      <span class="bulk-result-file">${escapeHtml(fileName)}</span>
-    </div>
-
-    <div class="bulk-result-grid">
-      <div>
-        <span>Candidate</span>
-        <strong>${escapeHtml(
-          result.candidateName || fallbackName
-        )}</strong>
-      </div>
-
-      <div>
-        <span>Match Score</span>
-        <strong>${score}%</strong>
-      </div>
-
-      <div>
-        <span>AI Decision</span>
-        <strong>${escapeHtml(decision)}</strong>
-      </div>
-
-      <div>
-        <span>Status</span>
-        <strong>${escapeHtml(
-          result.status || "AI_PROCESSED"
-        )}</strong>
-      </div>
-
-      <div class="skills-result">
-        <span>Matched Skills</span>
-        <div class="bulk-skill-list">
-          ${
-            matched.map(skill =>
-              `<span class="skill-chip">✓ ${escapeHtml(skill)}</span>`
-            ).join("") || "None reported"
-          }
-        </div>
-      </div>
-
-      <div class="skills-result">
-        <span>Missing Skills</span>
-        <div class="bulk-skill-list">
-          ${
-            missing.map(skill =>
-              `<span class="missing-chip">✗ ${escapeHtml(skill)}</span>`
-            ).join("") || "None reported"
-          }
-        </div>
-      </div>
-    </div>
-  `;
-
-  container.appendChild(card);
-}
-
-// Failed files are shown too, so every selected file is accounted for.
-function appendFailedResult(fileName, message) {
-  const container = document.getElementById("bulkResults");
-  const card = document.createElement("article");
-
-  card.className = "result-card bulk-result-card bulk-failed-card";
+  card.className = "bulk-result-card";
 
   const heading = document.createElement("div");
   heading.className = "bulk-result-heading";
 
-  const title = document.createElement("span");
-  title.className = "eyebrow";
-  title.textContent = "PROCESSING FAILED";
+  const title = document.createElement("h3");
+  title.textContent = result.candidateName || fallbackName;
 
-  const filename = document.createElement("strong");
+  const filename = document.createElement("span");
+  filename.className = "bulk-result-file";
   filename.textContent = fileName;
 
   heading.append(title, filename);
+  card.appendChild(heading);
 
-  const explanation = document.createElement("p");
-  explanation.textContent =
-    message || "This resume could not be processed.";
+  const grid = document.createElement("div");
+  grid.className = "bulk-result-grid";
 
-  card.append(heading, explanation);
+  addResultField(grid, "Match Score", `${score}%`);
+  addResultField(grid, "AI Decision", decision);
+  addResultField(grid, "Status", result.status || "AI_PROCESSED");
+  addResultField(grid, "Email", result.email || "Not provided");
+  addSkillField(grid, "Matched Skills", matched, "matched");
+  addSkillField(grid, "Missing Skills", missing, "missing");
+
+  card.appendChild(grid);
+
+  // appendChild preserves every card already displayed.
+  container.appendChild(card);
+}
+
+function addResultField(container, label, value) {
+  const field = document.createElement("div");
+  field.className = "bulk-result-field";
+
+  const caption = document.createElement("span");
+  caption.textContent = label;
+
+  const content = document.createElement("strong");
+  content.textContent = value;
+
+  field.append(caption, content);
+  container.appendChild(field);
+}
+
+function addSkillField(container, label, skills, type) {
+  const field = document.createElement("div");
+  field.className = "bulk-result-field bulk-result-skills";
+
+  const caption = document.createElement("span");
+  caption.textContent = label;
+  field.appendChild(caption);
+
+  const list = document.createElement("div");
+  list.className = "bulk-skill-list";
+
+  if (skills.length) {
+    skills.forEach(skill => {
+      const chip = document.createElement("span");
+      chip.className = type === "matched" ? "skill-chip" : "missing-chip";
+      chip.textContent = `${type === "matched" ? "✓" : "✗"} ${skill}`;
+      list.appendChild(chip);
+    });
+  } else {
+    const empty = document.createElement("span");
+    empty.textContent = "None reported by API";
+    list.appendChild(empty);
+  }
+
+  field.appendChild(list);
+  container.appendChild(field);
+}
+
+function appendFailedResult(fileName, message) {
+  const container = document.getElementById("bulkResults");
+  const card = document.createElement("article");
+
+  card.className = "bulk-result-card bulk-failed-card";
+
+  const title = document.createElement("h3");
+  title.textContent = fileName;
+
+  const errorText = document.createElement("p");
+  errorText.textContent = `Processing failed: ${message || "Unknown error"}`;
+
+  card.append(title, errorText);
   container.appendChild(card);
 }
 
