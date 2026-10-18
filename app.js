@@ -17,6 +17,7 @@ const REQUIRED = [
 ];
 
 const MAX_FILES_PER_BATCH = 100;
+let isProcessing = false;
 
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("signInBtn").onclick = () => {
@@ -50,9 +51,6 @@ function setupNav() {
 async function loadCandidates() {
   const table = document.getElementById("candidateTable");
 
-  table.innerHTML =
-    '<tr><td colspan="6" class="empty">Loading candidates from AWS...</td></tr>';
-
   try {
     const response = await fetch(API_URL);
 
@@ -61,7 +59,6 @@ async function loadCandidates() {
     }
 
     const raw = await response.json();
-
     const candidates = Array.isArray(raw)
       ? raw
       : (raw.candidates || []);
@@ -80,7 +77,7 @@ async function loadCandidates() {
       `AWS candidate data refreshed · ${candidates.length} records`
     );
   } catch (error) {
-    console.error(error);
+    console.error("Unable to load candidates:", error);
 
     table.innerHTML =
       '<tr><td colspan="6" class="empty">Unable to load AWS candidates. Check API Gateway.</td></tr>';
@@ -95,10 +92,7 @@ function normalizeSkills(value) {
   }
 
   if (typeof value === "string") {
-    return value
-      .split(",")
-      .map(skill => skill.trim())
-      .filter(Boolean);
+    return value.split(",").map(skill => skill.trim()).filter(Boolean);
   }
 
   return [];
@@ -115,7 +109,6 @@ function renderCandidates(candidates) {
 
   table.innerHTML = candidates.map((candidate, index) => {
     const score = Number(candidate.matchScore || 0);
-
     const decision =
       candidate.classification || classification(score);
 
@@ -127,6 +120,8 @@ function renderCandidates(candidates) {
         `<span class="skill-chip">${escapeHtml(skill)}</span>`
       )
       .join("");
+
+    const status = candidate.status || "RECEIVED";
 
     return `
       <tr>
@@ -147,12 +142,12 @@ function renderCandidates(candidates) {
         </td>
         <td>
           <span class="badge ${
-            candidate.status === "AI_PROCESSED" ||
-            candidate.status === "AUTOMATED_PROCESSED"
+            status === "AI_PROCESSED" ||
+            status === "AUTOMATED_PROCESSED"
               ? "excellent"
               : "moderate"
           }">
-            ${escapeHtml(candidate.status || "RECEIVED")}
+            ${escapeHtml(status)}
           </span>
         </td>
       </tr>
@@ -165,20 +160,22 @@ function renderStats(candidates) {
     candidates.length;
 
   document.getElementById("statProcessed").textContent =
-    candidates.filter(c =>
-      c.status === "AI_PROCESSED" ||
-      c.status === "AUTOMATED_PROCESSED"
+    candidates.filter(candidate =>
+      candidate.status === "AI_PROCESSED" ||
+      candidate.status === "AUTOMATED_PROCESSED"
     ).length;
 
   document.getElementById("statStrong").textContent =
     candidates.filter(
-      c => Number(c.matchScore || 0) >= 80
+      candidate => Number(candidate.matchScore || 0) >= 80
     ).length;
 
   document.getElementById("statTop").textContent =
     candidates.length
       ? Math.max(
-          ...candidates.map(c => Number(c.matchScore || 0))
+          ...candidates.map(candidate =>
+            Number(candidate.matchScore || 0)
+          )
         ) + "%"
       : "0%";
 }
@@ -241,7 +238,7 @@ function renderPipeline(candidates) {
     `).join("");
 }
 
-// Extract selectable PDF text and determine the candidate's name.
+// Extract selectable text from a PDF and determine candidate details.
 async function extractResume(file, pdfjs) {
   const pdf = await pdfjs.getDocument({
     data: await file.arrayBuffer()
@@ -249,11 +246,7 @@ async function extractResume(file, pdfjs) {
 
   const pageTexts = [];
 
-  for (
-    let pageNumber = 1;
-    pageNumber <= pdf.numPages;
-    pageNumber++
-  ) {
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
     const page = await pdf.getPage(pageNumber);
     const content = await page.getTextContent();
 
@@ -324,44 +317,47 @@ async function extractResume(file, pdfjs) {
     email: emailMatch
       ? emailMatch[0]
       : `no-email-${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2, 8)}@talentpulse.invalid`
+          .toString(36).slice(2, 8)}@talentpulse.invalid`
   };
 }
 
-// Process selected PDFs sequentially, up to 100 files per batch.
+// Process selected PDFs sequentially and retain every successful result.
 async function handleResume(event) {
+  if (isProcessing) return;
+
   const files = Array.from(event.target.files || []);
   const status = document.getElementById("uploadStatus");
-  const resultCard = document.getElementById("resultCard");
+  const container = document.getElementById("bulkResults");
   const fileInput = event.target;
+  const uploadLabel = document.querySelector(".upload-button span");
 
   if (!files.length) return;
 
   if (files.length > MAX_FILES_PER_BATCH) {
     status.textContent =
       `Please select a maximum of ${MAX_FILES_PER_BATCH} PDFs per batch.`;
-
     fileInput.value = "";
     return;
   }
 
-  if (
-    files.some(
-      file => !file.name.toLowerCase().endsWith(".pdf")
-    )
-  ) {
+  if (files.some(file => !/\.pdf$/i.test(file.name))) {
     status.textContent = "Please select PDF files only.";
     fileInput.value = "";
     return;
   }
 
+  isProcessing = true;
+  fileInput.disabled = true;
+  uploadLabel.textContent = "Processing Resumes...";
+
   let succeeded = 0;
   const failures = [];
 
+  container.innerHTML = "";
+
   try {
     status.textContent =
-      `Preparing ${files.length} resume(s) for processing...`;
+      `Loading PDF reader for ${files.length} resume(s)...`;
 
     const pdfjs = await import(
       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs"
@@ -370,13 +366,12 @@ async function handleResume(event) {
     pdfjs.GlobalWorkerOptions.workerSrc =
       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
 
-    resultCard.classList.add("hidden");
-
     for (let index = 0; index < files.length; index++) {
       const file = files[index];
 
       status.textContent =
-        `Processing ${index + 1} of ${files.length}: ${file.name}`;
+        `Processing ${index + 1} of ${files.length}: ${file.name} · ` +
+        `${succeeded} succeeded · ${failures.length} failed`;
 
       try {
         const resume = await extractResume(file, pdfjs);
@@ -398,112 +393,160 @@ async function handleResume(event) {
 
         if (!response.ok) {
           throw new Error(
-            raw.message ||
-            raw.error ||
-            `API error ${response.status}`
+            raw.message || raw.error || `API error ${response.status}`
           );
         }
 
         let result = raw;
 
         if (typeof raw.body === "string") {
-          try {
-            result = JSON.parse(raw.body);
-          } catch {
-            throw new Error(
-              "Unexpected response returned by the API."
-            );
-          }
-        } else if (
-          raw.body &&
-          typeof raw.body === "object"
-        ) {
+          result = JSON.parse(raw.body);
+        } else if (raw.body && typeof raw.body === "object") {
           result = raw.body;
         }
 
-        showResumeResult(result, resume.candidateName);
+        appendBulkResult(result, resume.candidateName, file.name);
+        succeeded++;
 
         addAudit(
           `Resume processed · ${
             result.candidateName || resume.candidateName
           } · ${result.matchScore ?? 0}%`
         );
-
-        succeeded++;
       } catch (error) {
-        console.error(
-          `Failed to process ${file.name}:`,
-          error
-        );
-
+        console.error(`Failed to process ${file.name}:`, error);
         failures.push(file.name);
+
+        appendFailedResult(file.name, error.message);
         addAudit(`Resume failed · ${file.name}`);
       }
-
-      // Display progress after every attempted resume.
-      const attempted = index + 1;
-
-      status.textContent =
-        `Progress: ${attempted}/${files.length} attempted · ` +
-        `${succeeded} succeeded · ${failures.length} failed`;
     }
 
-    // Refresh the candidate table and dashboard statistics.
+    // Reload AWS data after all resumes have been attempted.
     await loadCandidates();
 
-    if (failures.length === 0) {
-      status.textContent =
-        `✓ Completed: ${succeeded}/${files.length} resumes processed successfully.`;
-    } else {
-      status.textContent =
-        `Completed: ${succeeded} succeeded, ${failures.length} failed. ` +
-        `Failed files: ${failures.join(", ")}`;
-    }
+    status.textContent = failures.length === 0
+      ? `✓ Completed: ${succeeded}/${files.length} resumes processed successfully.`
+      : `Completed: ${succeeded} succeeded, ${failures.length} failed. Check the failed cards below.`;
 
     addAudit(
       `Bulk processing completed · ${succeeded} succeeded · ${failures.length} failed`
     );
   } catch (error) {
-    console.error("Bulk processing error:", error);
+    console.error("PDF reader initialization failed:", error);
 
     status.textContent =
       "Unable to load the PDF reader. Check your internet connection.";
 
     addAudit("PDF extraction engine failed to load");
   } finally {
+    isProcessing = false;
+    fileInput.disabled = false;
+    uploadLabel.textContent = "⇧ Choose Multiple PDF Resumes";
     fileInput.value = "";
   }
 }
 
-function showResumeResult(result, fallbackName) {
-  document.getElementById("resultName").textContent =
-    result.candidateName || fallbackName;
+// Append a new card instead of replacing the previous candidate.
+function appendBulkResult(result, fallbackName, fileName) {
+  const container = document.getElementById("bulkResults");
 
-  document.getElementById("resultScore").textContent =
-    (result.matchScore ?? 0) + "%";
+  const score = Number(result.matchScore ?? 0);
+  const decision =
+    result.classification || classification(score);
 
-  document.getElementById("resultClass").textContent =
-    result.classification ||
-    classification(Number(result.matchScore || 0));
+  const matched = normalizeSkills(
+    result.matchedSkills ?? result.skills
+  );
 
-  document.getElementById("resultStatus").textContent =
-    result.status || "AI_PROCESSED";
+  const missing = normalizeSkills(result.missingSkills);
 
-  document.getElementById("matchedSkills").innerHTML =
-    normalizeSkills(result.matchedSkills)
-      .map(skill =>
-        `<span class="skill-chip">✓ ${escapeHtml(skill)}</span>`
-      )
-      .join("") || "None";
+  const card = document.createElement("article");
+  card.className = "result-card bulk-result-card";
 
-  document.getElementById("missingSkills").innerHTML =
-    normalizeSkills(result.missingSkills)
-      .map(skill =>
-        `<span class="missing-chip">✗ ${escapeHtml(skill)}</span>`
-      )
-      .join("") || "None";
+  card.innerHTML = `
+    <div class="bulk-result-heading">
+      <span class="eyebrow">CANDIDATE RESULT</span>
+      <span class="bulk-result-file">${escapeHtml(fileName)}</span>
+    </div>
 
-  document.getElementById("resultCard").classList.remove("hidden");
+    <div class="bulk-result-grid">
+      <div>
+        <span>Candidate</span>
+        <strong>${escapeHtml(
+          result.candidateName || fallbackName
+        )}</strong>
+      </div>
+
+      <div>
+        <span>Match Score</span>
+        <strong>${score}%</strong>
+      </div>
+
+      <div>
+        <span>AI Decision</span>
+        <strong>${escapeHtml(decision)}</strong>
+      </div>
+
+      <div>
+        <span>Status</span>
+        <strong>${escapeHtml(
+          result.status || "AI_PROCESSED"
+        )}</strong>
+      </div>
+
+      <div class="skills-result">
+        <span>Matched Skills</span>
+        <div class="bulk-skill-list">
+          ${
+            matched.map(skill =>
+              `<span class="skill-chip">✓ ${escapeHtml(skill)}</span>`
+            ).join("") || "None reported"
+          }
+        </div>
+      </div>
+
+      <div class="skills-result">
+        <span>Missing Skills</span>
+        <div class="bulk-skill-list">
+          ${
+            missing.map(skill =>
+              `<span class="missing-chip">✗ ${escapeHtml(skill)}</span>`
+            ).join("") || "None reported"
+          }
+        </div>
+      </div>
+    </div>
+  `;
+
+  container.appendChild(card);
+}
+
+// Failed files are shown too, so every selected file is accounted for.
+function appendFailedResult(fileName, message) {
+  const container = document.getElementById("bulkResults");
+  const card = document.createElement("article");
+
+  card.className = "result-card bulk-result-card bulk-failed-card";
+
+  const heading = document.createElement("div");
+  heading.className = "bulk-result-heading";
+
+  const title = document.createElement("span");
+  title.className = "eyebrow";
+  title.textContent = "PROCESSING FAILED";
+
+  const filename = document.createElement("strong");
+  filename.textContent = fileName;
+
+  heading.append(title, filename);
+
+  const explanation = document.createElement("p");
+  explanation.textContent =
+    message || "This resume could not be processed.";
+
+  card.append(heading, explanation);
+  container.appendChild(card);
 }
 
 function classification(score) {
