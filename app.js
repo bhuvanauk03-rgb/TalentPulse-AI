@@ -1,3 +1,4 @@
+
 const API_URL =
   "https://xhrw4xpw61.execute-api.ap-south-1.amazonaws.com/candidates";
 
@@ -15,7 +16,7 @@ const REQUIRED = [
   "Machine Learning"
 ];
 
-const MAX_FILES_PER_BATCH = 10;
+const MAX_FILES_PER_BATCH = 100;
 
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("signInBtn").onclick = () => {
@@ -24,7 +25,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("refreshBtn").onclick = loadCandidates;
   document.getElementById("refreshCandidates").onclick = loadCandidates;
-  document.getElementById("resumeFile").addEventListener("change", handleResume);
+
+  document.getElementById("resumeFile").addEventListener(
+    "change",
+    handleResume
+  );
 
   setupNav();
   loadCandidates();
@@ -36,6 +41,7 @@ function setupNav() {
       document.querySelectorAll(".nav-item").forEach(item => {
         item.classList.remove("active");
       });
+
       link.classList.add("active");
     });
   });
@@ -43,20 +49,26 @@ function setupNav() {
 
 async function loadCandidates() {
   const table = document.getElementById("candidateTable");
+
   table.innerHTML =
     '<tr><td colspan="6" class="empty">Loading candidates from AWS...</td></tr>';
 
   try {
     const response = await fetch(API_URL);
-    if (!response.ok) throw new Error(`API returned ${response.status}`);
+
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
 
     const raw = await response.json();
+
     const candidates = Array.isArray(raw)
       ? raw
       : (raw.candidates || []);
 
     candidates.sort(
-      (a, b) => Number(b.matchScore || 0) - Number(a.matchScore || 0)
+      (a, b) =>
+        Number(b.matchScore || 0) - Number(a.matchScore || 0)
     );
 
     renderCandidates(candidates);
@@ -64,20 +76,29 @@ async function loadCandidates() {
     renderSkills(candidates);
     renderPipeline(candidates);
 
-    addAudit(`AWS candidate data refreshed · ${candidates.length} records`);
+    addAudit(
+      `AWS candidate data refreshed · ${candidates.length} records`
+    );
   } catch (error) {
     console.error(error);
+
     table.innerHTML =
       '<tr><td colspan="6" class="empty">Unable to load AWS candidates. Check API Gateway.</td></tr>';
+
     addAudit("Candidate API connection failed");
   }
 }
 
 function normalizeSkills(value) {
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) {
+    return value;
+  }
 
   if (typeof value === "string") {
-    return value.split(",").map(skill => skill.trim()).filter(Boolean);
+    return value
+      .split(",")
+      .map(skill => skill.trim())
+      .filter(Boolean);
   }
 
   return [];
@@ -94,14 +115,18 @@ function renderCandidates(candidates) {
 
   table.innerHTML = candidates.map((candidate, index) => {
     const score = Number(candidate.matchScore || 0);
+
     const decision =
       candidate.classification || classification(score);
 
     const skills = normalizeSkills(
       candidate.matchedSkills ?? candidate.skills
-    ).slice(0, 4).map(skill =>
-      `<span class="skill-chip">${escapeHtml(skill)}</span>`
-    ).join("");
+    )
+      .slice(0, 4)
+      .map(skill =>
+        `<span class="skill-chip">${escapeHtml(skill)}</span>`
+      )
+      .join("");
 
     return `
       <tr>
@@ -122,7 +147,10 @@ function renderCandidates(candidates) {
         </td>
         <td>
           <span class="badge ${
-            candidate.status === "AUTOMATED_PROCESSED" ? "excellent" : "moderate"
+            candidate.status === "AI_PROCESSED" ||
+            candidate.status === "AUTOMATED_PROCESSED"
+              ? "excellent"
+              : "moderate"
           }">
             ${escapeHtml(candidate.status || "RECEIVED")}
           </span>
@@ -137,14 +165,21 @@ function renderStats(candidates) {
     candidates.length;
 
   document.getElementById("statProcessed").textContent =
-    candidates.filter(c => c.status === "AI_PROCESSED").length;
+    candidates.filter(c =>
+      c.status === "AI_PROCESSED" ||
+      c.status === "AUTOMATED_PROCESSED"
+    ).length;
 
   document.getElementById("statStrong").textContent =
-    candidates.filter(c => Number(c.matchScore || 0) >= 80).length;
+    candidates.filter(
+      c => Number(c.matchScore || 0) >= 80
+    ).length;
 
   document.getElementById("statTop").textContent =
     candidates.length
-      ? Math.max(...candidates.map(c => Number(c.matchScore || 0))) + "%"
+      ? Math.max(
+          ...candidates.map(c => Number(c.matchScore || 0))
+        ) + "%"
       : "0%";
 }
 
@@ -169,7 +204,9 @@ function renderSkills(candidates) {
     return `
       <div class="skill-row">
         <span>${escapeHtml(skill)}</span>
-        <div class="bar"><i style="width:${percentage}%"></i></div>
+        <div class="bar">
+          <i style="width:${percentage}%"></i>
+        </div>
         <b>${percentage}%</b>
       </div>
     `;
@@ -204,7 +241,7 @@ function renderPipeline(candidates) {
     `).join("");
 }
 
-// Extract PDF text and determine the candidate's name.
+// Extract selectable PDF text and determine the candidate's name.
 async function extractResume(file, pdfjs) {
   const pdf = await pdfjs.getDocument({
     data: await file.arrayBuffer()
@@ -212,7 +249,11 @@ async function extractResume(file, pdfjs) {
 
   const pageTexts = [];
 
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+  for (
+    let pageNumber = 1;
+    pageNumber <= pdf.numPages;
+    pageNumber++
+  ) {
     const page = await pdf.getPage(pageNumber);
     const content = await page.getTextContent();
 
@@ -233,7 +274,6 @@ async function extractResume(file, pdfjs) {
     /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
   );
 
-  // Dataset filenames such as Rohan_Patel.pdf provide a useful name.
   const filenameName = file.name
     .replace(/\.pdf$/i, "")
     .replace(/[_-]+/g, " ")
@@ -249,7 +289,6 @@ async function extractResume(file, pdfjs) {
     .replace(/\s+/g, " ")
     .trim();
 
-  // Remove common headings and contact details from the name candidate.
   const headingPosition = cleanedText.search(
     /\b(PROFESSIONAL SUMMARY|SUMMARY|EDUCATION|TECHNICAL SKILLS|SKILLS|EXPERIENCE|PROJECTS|CAREER OBJECTIVE)\b/i
   );
@@ -266,7 +305,6 @@ async function extractResume(file, pdfjs) {
 
   let candidateName;
 
-  // Prefer a human-looking name in the PDF text.
   if (looksLikeName(prefix)) {
     candidateName = prefix;
   } else if (
@@ -285,28 +323,36 @@ async function extractResume(file, pdfjs) {
     candidateName,
     email: emailMatch
       ? emailMatch[0]
-      : `no-email-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@talentpulse.invalid`
+      : `no-email-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}@talentpulse.invalid`
   };
 }
 
-// Process selected PDFs one at a time, up to 10 per batch.
+// Process selected PDFs sequentially, up to 100 files per batch.
 async function handleResume(event) {
   const files = Array.from(event.target.files || []);
   const status = document.getElementById("uploadStatus");
   const resultCard = document.getElementById("resultCard");
+  const fileInput = event.target;
 
   if (!files.length) return;
 
   if (files.length > MAX_FILES_PER_BATCH) {
     status.textContent =
       `Please select a maximum of ${MAX_FILES_PER_BATCH} PDFs per batch.`;
-    event.target.value = "";
+
+    fileInput.value = "";
     return;
   }
 
-  if (files.some(file => !file.name.toLowerCase().endsWith(".pdf"))) {
+  if (
+    files.some(
+      file => !file.name.toLowerCase().endsWith(".pdf")
+    )
+  ) {
     status.textContent = "Please select PDF files only.";
-    event.target.value = "";
+    fileInput.value = "";
     return;
   }
 
@@ -314,7 +360,8 @@ async function handleResume(event) {
   const failures = [];
 
   try {
-    status.textContent = "Loading PDF extraction engine...";
+    status.textContent =
+      `Preparing ${files.length} resume(s) for processing...`;
 
     const pdfjs = await import(
       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs"
@@ -336,7 +383,9 @@ async function handleResume(event) {
 
         const response = await fetch(API_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json"
+          },
           body: JSON.stringify({
             candidateName: resume.candidateName,
             email: resume.email,
@@ -349,7 +398,9 @@ async function handleResume(event) {
 
         if (!response.ok) {
           throw new Error(
-            raw.message || raw.error || `API error ${response.status}`
+            raw.message ||
+            raw.error ||
+            `API error ${response.status}`
           );
         }
 
@@ -359,37 +410,68 @@ async function handleResume(event) {
           try {
             result = JSON.parse(raw.body);
           } catch {
-            throw new Error("Unexpected response returned by the API.");
+            throw new Error(
+              "Unexpected response returned by the API."
+            );
           }
-        } else if (raw.body && typeof raw.body === "object") {
+        } else if (
+          raw.body &&
+          typeof raw.body === "object"
+        ) {
           result = raw.body;
         }
 
         showResumeResult(result, resume.candidateName);
 
         addAudit(
-          `Resume processed · ${result.candidateName || resume.candidateName} · ${result.matchScore ?? 0}%`
+          `Resume processed · ${
+            result.candidateName || resume.candidateName
+          } · ${result.matchScore ?? 0}%`
         );
 
         succeeded++;
       } catch (error) {
-        console.error(`Failed to process ${file.name}:`, error);
+        console.error(
+          `Failed to process ${file.name}:`,
+          error
+        );
+
         failures.push(file.name);
         addAudit(`Resume failed · ${file.name}`);
       }
+
+      // Display progress after every attempted resume.
+      const attempted = index + 1;
+
+      status.textContent =
+        `Progress: ${attempted}/${files.length} attempted · ` +
+        `${succeeded} succeeded · ${failures.length} failed`;
     }
 
+    // Refresh the candidate table and dashboard statistics.
     await loadCandidates();
 
-    status.textContent = failures.length === 0
-      ? `✓ Completed: ${succeeded}/${files.length} resumes processed successfully.`
-      : `Completed: ${succeeded} succeeded, ${failures.length} failed. Failed files: ${failures.join(", ")}`;
+    if (failures.length === 0) {
+      status.textContent =
+        `✓ Completed: ${succeeded}/${files.length} resumes processed successfully.`;
+    } else {
+      status.textContent =
+        `Completed: ${succeeded} succeeded, ${failures.length} failed. ` +
+        `Failed files: ${failures.join(", ")}`;
+    }
+
+    addAudit(
+      `Bulk processing completed · ${succeeded} succeeded · ${failures.length} failed`
+    );
   } catch (error) {
-    console.error(error);
+    console.error("Bulk processing error:", error);
+
     status.textContent =
       "Unable to load the PDF reader. Check your internet connection.";
+
+    addAudit("PDF extraction engine failed to load");
   } finally {
-    event.target.value = "";
+    fileInput.value = "";
   }
 }
 
@@ -408,14 +490,18 @@ function showResumeResult(result, fallbackName) {
     result.status || "AI_PROCESSED";
 
   document.getElementById("matchedSkills").innerHTML =
-    normalizeSkills(result.matchedSkills).map(skill =>
-      `<span class="skill-chip">✓ ${escapeHtml(skill)}</span>`
-    ).join("") || "None";
+    normalizeSkills(result.matchedSkills)
+      .map(skill =>
+        `<span class="skill-chip">✓ ${escapeHtml(skill)}</span>`
+      )
+      .join("") || "None";
 
   document.getElementById("missingSkills").innerHTML =
-    normalizeSkills(result.missingSkills).map(skill =>
-      `<span class="missing-chip">✗ ${escapeHtml(skill)}</span>`
-    ).join("") || "None";
+    normalizeSkills(result.missingSkills)
+      .map(skill =>
+        `<span class="missing-chip">✗ ${escapeHtml(skill)}</span>`
+      )
+      .join("") || "None";
 
   document.getElementById("resultCard").classList.remove("hidden");
 }
