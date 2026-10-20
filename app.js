@@ -1,4 +1,3 @@
-
 const API_URL =
   "https://xhrw4xpw61.execute-api.ap-south-1.amazonaws.com/candidates";
 
