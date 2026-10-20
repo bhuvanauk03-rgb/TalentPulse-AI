@@ -1,3 +1,8 @@
+
+/* ==========================================
+   TALENTPULSE AI — BULK RESUME SCREENING
+   ========================================== */
+
 const API_URL =
   "https://xhrw4xpw61.execute-api.ap-south-1.amazonaws.com/candidates";
 
@@ -16,20 +21,39 @@ const REQUIRED = [
 ];
 
 const MAX_FILES_PER_BATCH = 100;
-let isProcessing = false;
+
+let processedThisSession = [];
+let processingBatch = false;
 
 document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("signInBtn").onclick = () => {
-    location.href = COGNITO_URL;
-  };
+  const signInBtn = document.getElementById("signInBtn");
+  const refreshBtn = document.getElementById("refreshBtn");
+  const refreshCandidates = document.getElementById("refreshCandidates");
+  const resumeFile = document.getElementById("resumeFile");
 
-  document.getElementById("refreshBtn").onclick = loadCandidates;
-  document.getElementById("refreshCandidates").onclick = loadCandidates;
-  document.getElementById("resumeFile").addEventListener("change", handleResume);
+  if (signInBtn) {
+    signInBtn.addEventListener("click", () => {
+      window.location.href = COGNITO_URL;
+    });
+  }
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", loadCandidates);
+  }
+
+  if (refreshCandidates) {
+    refreshCandidates.addEventListener("click", loadCandidates);
+  }
+
+  if (resumeFile) {
+    resumeFile.addEventListener("change", handleResume);
+  }
 
   setupNav();
   loadCandidates();
 });
+
+/* NAVIGATION */
 
 function setupNav() {
   document.querySelectorAll(".nav-item").forEach(link => {
@@ -37,23 +61,71 @@ function setupNav() {
       document.querySelectorAll(".nav-item").forEach(item => {
         item.classList.remove("active");
       });
+
       link.classList.add("active");
     });
   });
 }
 
+/* API RESPONSE NORMALIZATION */
+
+async function readApiResponse(response) {
+  const rawText = await response.text();
+
+  let raw = {};
+
+  try {
+    raw = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    throw new Error("The API returned an invalid JSON response.");
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      raw.message ||
+      raw.error ||
+      `API request failed with status ${response.status}`
+    );
+  }
+
+  if (typeof raw.body === "string") {
+    try {
+      return JSON.parse(raw.body);
+    } catch {
+      throw new Error("The API returned an invalid response body.");
+    }
+  }
+
+  if (raw.body && typeof raw.body === "object") {
+    return raw.body;
+  }
+
+  return raw;
+}
+
+/* LOAD CANDIDATES */
+
 async function loadCandidates() {
   const table = document.getElementById("candidateTable");
 
+  if (table) {
+    table.innerHTML =
+      '<tr><td colspan="6" class="empty">Loading candidates from AWS...</td></tr>';
+  }
+
   try {
     const response = await fetch(API_URL);
-    if (!response.ok) throw new Error(`API returned ${response.status}`);
+    const raw = await readApiResponse(response);
 
-    const raw = await response.json();
-    const candidates = Array.isArray(raw) ? raw : (raw.candidates || []);
+    const candidates = Array.isArray(raw)
+      ? raw
+      : Array.isArray(raw.candidates)
+        ? raw.candidates
+        : [];
 
     candidates.sort(
-      (a, b) => Number(b.matchScore || 0) - Number(a.matchScore || 0)
+      (a, b) =>
+        Number(b.matchScore || 0) - Number(a.matchScore || 0)
     );
 
     renderCandidates(candidates);
@@ -61,111 +133,196 @@ async function loadCandidates() {
     renderSkills(candidates);
     renderPipeline(candidates);
 
-    addAudit(`AWS candidate data refreshed · ${candidates.length} records`);
+    addAudit(
+      `AWS candidate data refreshed · ${candidates.length} records`
+    );
   } catch (error) {
     console.error("Unable to load candidates:", error);
-    table.innerHTML =
-      '<tr><td colspan="6" class="empty">Unable to load AWS candidates. Check API Gateway.</td></tr>';
+
+    if (table) {
+      table.innerHTML =
+        '<tr><td colspan="6" class="empty">Unable to load AWS candidates. Check the API URL, route, and CORS configuration.</td></tr>';
+    }
+
     addAudit("Candidate API connection failed");
   }
 }
 
+/* NORMALIZE SKILLS */
+
 function normalizeSkills(value) {
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) {
+    return value
+      .map(item => String(item).trim())
+      .filter(Boolean);
+  }
 
   if (typeof value === "string") {
-    return value.split(",").map(skill => skill.trim()).filter(Boolean);
+    return value
+      .split(",")
+      .map(item => item.trim())
+      .filter(Boolean);
   }
 
   return [];
 }
 
+/* CLASSIFICATION */
+
+function classification(score) {
+  if (score >= 90) return "Excellent Match";
+  if (score >= 80) return "Strong Match";
+  if (score >= 70) return "Good Match";
+  if (score >= 60) return "Moderate Match";
+  return "Low Match";
+}
+
+function badgeClass(value) {
+  const text = String(value || "").toLowerCase();
+
+  if (text.includes("excellent")) return "excellent";
+  if (text.includes("strong")) return "strong";
+  if (text.includes("good")) return "good";
+  if (text.includes("moderate")) return "moderate";
+
+  return "low";
+}
+
+/* RENDER CANDIDATE TABLE */
+
 function renderCandidates(candidates) {
   const table = document.getElementById("candidateTable");
+  if (!table) return;
 
   if (!candidates.length) {
     table.innerHTML =
-      '<tr><td colspan="6" class="empty">No candidates found.</td></tr>';
+      '<tr><td colspan="6" class="empty">No candidates found. Upload PDF resumes to begin.</td></tr>';
     return;
   }
 
   table.innerHTML = candidates.map((candidate, index) => {
     const score = Number(candidate.matchScore || 0);
-    const decision = candidate.classification || classification(score);
-    const status = candidate.status || "RECEIVED";
+
+    const decision =
+      candidate.classification || classification(score);
 
     const skills = normalizeSkills(
       candidate.matchedSkills ?? candidate.skills
-    ).slice(0, 4).map(skill =>
-      `<span class="skill-chip">${escapeHtml(skill)}</span>`
-    ).join("");
+    )
+      .slice(0, 4)
+      .map(skill =>
+        `<span class="skill-chip">${escapeHtml(skill)}</span>`
+      )
+      .join("");
+
+    const status = candidate.status || "RECEIVED";
 
     return `
       <tr>
         <td>#${index + 1}</td>
+
         <td>
-          <span class="candidate-name">${escapeHtml(candidate.candidateName || "Candidate")}</span>
-          <br><small>${escapeHtml(candidate.email || "")}</small>
+          <span class="candidate-name">
+            ${escapeHtml(candidate.candidateName || "Candidate")}
+          </span>
+          <br>
+          <small>${escapeHtml(candidate.email || "")}</small>
         </td>
+
         <td>${skills || "—"}</td>
+
         <td class="score">${score}%</td>
-        <td><span class="badge ${badgeClass(decision)}">${escapeHtml(decision)}</span></td>
+
         <td>
-          <span class="badge ${
-            status === "AI_PROCESSED" || status === "AUTOMATED_PROCESSED"
-              ? "excellent" : "moderate"
-          }">${escapeHtml(status)}</span>
+          <span class="badge ${badgeClass(decision)}">
+            ${escapeHtml(decision)}
+          </span>
+        </td>
+
+        <td>
+          <span class="badge ${badgeClass(decision)}">
+            ${escapeHtml(status)}
+          </span>
         </td>
       </tr>
     `;
   }).join("");
 }
 
+/* DASHBOARD STATISTICS */
+
 function renderStats(candidates) {
-  document.getElementById("statCandidates").textContent = candidates.length;
+  const total = document.getElementById("statCandidates");
+  const processed = document.getElementById("statProcessed");
+  const strong = document.getElementById("statStrong");
+  const top = document.getElementById("statTop");
 
-  document.getElementById("statProcessed").textContent =
-    candidates.filter(c =>
-      c.status === "AI_PROCESSED" ||
-      c.status === "AUTOMATED_PROCESSED"
+  if (total) total.textContent = candidates.length;
+
+  if (processed) {
+    processed.textContent = candidates.filter(candidate =>
+      Number.isFinite(Number(candidate.matchScore))
     ).length;
+  }
 
-  document.getElementById("statStrong").textContent =
-    candidates.filter(c => Number(c.matchScore || 0) >= 80).length;
+  if (strong) {
+    strong.textContent = candidates.filter(
+      candidate => Number(candidate.matchScore || 0) >= 80
+    ).length;
+  }
 
-  document.getElementById("statTop").textContent = candidates.length
-    ? Math.max(...candidates.map(c => Number(c.matchScore || 0))) + "%"
-    : "0%";
+  if (top) {
+    const highest = candidates.length
+      ? Math.max(
+          ...candidates.map(candidate =>
+            Number(candidate.matchScore || 0)
+          )
+        )
+      : 0;
+
+    top.textContent = `${highest}%`;
+  }
 }
+
+/* SKILL MATRIX */
 
 function renderSkills(candidates) {
   const box = document.getElementById("skillMatrix");
+  if (!box) return;
 
   box.innerHTML = REQUIRED.map(skill => {
     const count = candidates.filter(candidate => {
       const skills = normalizeSkills(
         candidate.matchedSkills ?? candidate.skills
       );
+
       return skills.some(item =>
         item.toLowerCase().includes(skill.toLowerCase())
       );
     }).length;
 
     const percentage = candidates.length
-      ? Math.round(count / candidates.length * 100)
+      ? Math.round((count / candidates.length) * 100)
       : 0;
 
     return `
       <div class="skill-row">
         <span>${escapeHtml(skill)}</span>
-        <div class="bar"><i style="width:${percentage}%"></i></div>
+        <div class="bar">
+          <i style="width:${percentage}%"></i>
+        </div>
         <b>${percentage}%</b>
       </div>
     `;
   }).join("");
 }
 
+/* HIRING PIPELINE */
+
 function renderPipeline(candidates) {
+  const box = document.getElementById("pipelineStats");
+  if (!box) return;
+
   const counts = {
     Excellent: 0,
     Strong: 0,
@@ -176,6 +333,7 @@ function renderPipeline(candidates) {
 
   candidates.forEach(candidate => {
     const score = Number(candidate.matchScore || 0);
+
     if (score >= 90) counts.Excellent++;
     else if (score >= 80) counts.Strong++;
     else if (score >= 70) counts.Good++;
@@ -183,10 +341,61 @@ function renderPipeline(candidates) {
     else counts.Low++;
   });
 
-  document.getElementById("pipelineStats").innerHTML =
-    Object.entries(counts).map(([name, count]) => `
-      <div class="pipeline-row"><span>${name} Match</span><b>${count}</b></div>
-    `).join("");
+  const maximum = Math.max(1, ...Object.values(counts));
+
+  box.innerHTML = Object.entries(counts).map(([name, count]) => `
+    <div class="pipeline-row">
+      <span>${name} Match</span>
+
+      <div class="matrix-track">
+        <span style="width:${(count / maximum) * 100}%"></span>
+      </div>
+
+      <b>${count}</b>
+    </div>
+  `).join("");
+}
+
+/* PDF TEXT EXTRACTION */
+
+async function loadPdfJs() {
+  if (window.pdfjsLib) {
+    return window.pdfjsLib;
+  }
+
+  await new Promise((resolve, reject) => {
+    const existing = document.querySelector(
+      'script[data-pdfjs="true"]'
+    );
+
+    if (existing) {
+      existing.addEventListener("load", resolve, { once: true });
+      existing.addEventListener("error", reject, { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+
+    script.src =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+
+    script.dataset.pdfjs = "true";
+
+    script.onload = resolve;
+    script.onerror = () =>
+      reject(new Error("Could not load the PDF extraction library."));
+
+    document.head.appendChild(script);
+  });
+
+  if (!window.pdfjsLib) {
+    throw new Error("PDF.js did not initialize.");
+  }
+
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  return window.pdfjsLib;
 }
 
 async function extractResume(file, pdfjs) {
@@ -196,16 +405,25 @@ async function extractResume(file, pdfjs) {
 
   const pageTexts = [];
 
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+  for (
+    let pageNumber = 1;
+    pageNumber <= pdf.numPages;
+    pageNumber++
+  ) {
     const page = await pdf.getPage(pageNumber);
     const content = await page.getTextContent();
-    pageTexts.push(content.items.map(item => item.str || "").join(" "));
+
+    pageTexts.push(
+      content.items.map(item => item.str || "").join(" ")
+    );
   }
 
   const resumeText = pageTexts.join("\n").trim();
 
   if (!resumeText) {
-    throw new Error("No selectable text found. This PDF may be scanned and need OCR.");
+    throw new Error(
+      "No selectable text found. This PDF may be scanned and require OCR."
+    );
   }
 
   const emailMatch = resumeText.match(
@@ -235,21 +453,18 @@ async function extractResume(file, pdfjs) {
     ? cleanedText.slice(0, headingPosition).trim()
     : cleanedText;
 
-  const firstWords = prefix.split(/\s+/).filter(Boolean);
-
   const looksLikeName = value =>
     /^[A-Za-z][A-Za-z'’-]*(?:\s+[A-Za-z][A-Za-z'’-]*){1,3}$/.test(value) &&
     !/\b(Intern|Engineer|Developer|Student|Summary|Resume|Curriculum|Vitae)\b/i.test(value);
+
+  const firstTwoWords = prefix.split(/\s+/).slice(0, 2).join(" ");
 
   let candidateName;
 
   if (looksLikeName(prefix)) {
     candidateName = prefix;
-  } else if (
-    firstWords.length >= 2 &&
-    looksLikeName(firstWords.slice(0, 2).join(" "))
-  ) {
-    candidateName = firstWords.slice(0, 2).join(" ");
+  } else if (looksLikeName(firstTwoWords)) {
+    candidateName = firstTwoWords;
   } else if (looksLikeName(filenameName)) {
     candidateName = filenameName;
   } else {
@@ -261,67 +476,88 @@ async function extractResume(file, pdfjs) {
     candidateName,
     email: emailMatch
       ? emailMatch[0]
-      : `no-email-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@talentpulse.invalid`
+      : ""
   };
 }
 
+/* BULK PROCESSING */
+
 async function handleResume(event) {
-  if (isProcessing) return;
-
   const files = Array.from(event.target.files || []);
-  const status = document.getElementById("uploadStatus");
-  const container = document.getElementById("bulkResults");
-  const fileInput = event.target;
-  const uploadLabel = document.querySelector(".upload-button span");
 
-  if (!files.length) return;
+  const status = document.getElementById("uploadStatus");
+
+  if (!files.length || processingBatch) return;
 
   if (files.length > MAX_FILES_PER_BATCH) {
     status.textContent =
-      `Please select a maximum of ${MAX_FILES_PER_BATCH} PDFs per batch.`;
-    fileInput.value = "";
+      `Select no more than ${MAX_FILES_PER_BATCH} PDFs in one batch.`;
+
+    event.target.value = "";
     return;
   }
 
-  if (files.some(file => !/\.pdf$/i.test(file.name))) {
+  if (files.some(file => !file.name.toLowerCase().endsWith(".pdf"))) {
     status.textContent = "Please select PDF files only.";
-    fileInput.value = "";
+    event.target.value = "";
     return;
   }
 
-  isProcessing = true;
-  fileInput.disabled = true;
-  uploadLabel.textContent = "Processing Resumes...";
+  processingBatch = true;
+
+  const progressPanel = document.getElementById("bulkProgressPanel");
+  const progressLabel = document.getElementById("bulkProgressLabel");
+  const progressCount = document.getElementById("bulkProgressCount");
+  const progressBar = document.getElementById("bulkProgressBar");
+  const successCount = document.getElementById("bulkSuccessCount");
+  const failedCount = document.getElementById("bulkFailedCount");
+  const selectedCount = document.getElementById("bulkSelectedCount");
+  const fileResults = document.getElementById("bulkFileResults");
+  const resultsBox = document.getElementById("bulkResults");
+
+  if (progressPanel) progressPanel.style.display = "block";
+  if (selectedCount) selectedCount.textContent = files.length;
+  if (successCount) successCount.textContent = "0";
+  if (failedCount) failedCount.textContent = "0";
+  if (progressBar) progressBar.style.width = "0%";
+  if (progressCount) {
+    progressCount.textContent = `0 / ${files.length} (0%)`;
+  }
+  if (fileResults) fileResults.innerHTML = "";
+
+  if (resultsBox) {
+    resultsBox.innerHTML = "";
+  }
+
+  processedThisSession = [];
 
   let succeeded = 0;
-  const failures = [];
-
-  // Remove the previous batch's cards only when a new batch starts.
-  container.replaceChildren();
+  let failed = 0;
 
   try {
-    status.textContent = `Loading PDF reader for ${files.length} resumes...`;
+    status.textContent = "Loading PDF extraction engine...";
 
-    const pdfjs = await import(
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs"
-    );
-
-    pdfjs.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+    const pdfjs = await loadPdfJs();
 
     for (let index = 0; index < files.length; index++) {
       const file = files[index];
 
+      if (progressLabel) {
+        progressLabel.textContent =
+          `Processing ${index + 1} of ${files.length}: ${file.name}`;
+      }
+
       status.textContent =
-        `Processing ${index + 1}/${files.length}: ${file.name} · ` +
-        `${succeeded} succeeded · ${failures.length} failed`;
+        `Processing ${index + 1}/${files.length}: ${file.name}`;
 
       try {
         const resume = await extractResume(file, pdfjs);
 
         const response = await fetch(API_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json"
+          },
           body: JSON.stringify({
             candidateName: resume.candidateName,
             email: resume.email,
@@ -330,178 +566,179 @@ async function handleResume(event) {
           })
         });
 
-        const raw = await response.json();
+        const result = await readApiResponse(response);
 
-        if (!response.ok) {
-          throw new Error(
-            raw.message || raw.error || `API error ${response.status}`
-          );
-        }
+        const candidate = {
+          ...result,
+          candidateName:
+            result.candidateName || resume.candidateName,
+          email: result.email || resume.email,
+          matchScore: Number(result.matchScore || 0),
+          classification:
+            result.classification ||
+            classification(Number(result.matchScore || 0)),
+          matchedSkills: normalizeSkills(result.matchedSkills),
+          missingSkills: normalizeSkills(result.missingSkills),
+          status: result.status || "AI_PROCESSED",
+          fileName: file.name
+        };
 
-        let result = raw;
-
-        if (typeof raw.body === "string") {
-          result = JSON.parse(raw.body);
-        } else if (raw.body && typeof raw.body === "object") {
-          result = raw.body;
-        }
-
-        // A NEW card is appended for every successfully processed resume.
-        appendBulkResult(result, resume.candidateName, file.name);
         succeeded++;
+        processedThisSession.push(candidate);
+
+        renderBulkResult(candidate);
+        addFileResult(file.name, true, "Processed successfully");
 
         addAudit(
-          `Resume processed · ${result.candidateName || resume.candidateName} · ${result.matchScore ?? 0}%`
+          `Resume processed · ${candidate.candidateName} · ${candidate.matchScore}%`
         );
       } catch (error) {
+        failed++;
+
         console.error(`Failed to process ${file.name}:`, error);
-        failures.push(file.name);
-        appendFailedResult(file.name, error.message);
+
+        addFileResult(
+          file.name,
+          false,
+          error.message || "Processing failed"
+        );
+
         addAudit(`Resume failed · ${file.name}`);
       }
 
-      status.textContent =
-        `Progress: ${index + 1}/${files.length} attempted · ` +
-        `${succeeded} succeeded · ${failures.length} failed`;
+      const completed = index + 1;
+      const percentage = Math.round((completed / files.length) * 100);
+
+      if (progressBar) {
+        progressBar.style.width = `${percentage}%`;
+      }
+
+      if (progressCount) {
+        progressCount.textContent =
+          `${completed} / ${files.length} (${percentage}%)`;
+      }
+
+      if (successCount) successCount.textContent = succeeded;
+      if (failedCount) failedCount.textContent = failed;
     }
 
-    await loadCandidates();
-
-    status.textContent = failures.length === 0
-      ? `✓ Completed: ${succeeded}/${files.length} resumes processed successfully.`
-      : `Completed: ${succeeded} succeeded, ${failures.length} failed. See the result cards below.`;
-
-    addAudit(
-      `Bulk processing completed · ${succeeded} succeeded · ${failures.length} failed`
-    );
-  } catch (error) {
-    console.error("PDF reader initialization failed:", error);
     status.textContent =
-      "Unable to load the PDF reader. Check your internet connection.";
+      `Batch completed: ${succeeded} succeeded, ${failed} failed.`;
+
+    if (progressLabel) {
+      progressLabel.textContent = "Bulk processing complete";
+    }
+
+    // Refresh AWS-backed table and dashboard after batch completion.
+    await loadCandidates();
+  } catch (error) {
+    console.error("Bulk processing failed:", error);
+
+    status.textContent =
+      error.message || "Unable to load PDF processing resources.";
   } finally {
-    isProcessing = false;
-    fileInput.disabled = false;
-    uploadLabel.textContent = "⇧ Choose Multiple PDF Resumes";
-    fileInput.value = "";
+    processingBatch = false;
+    event.target.value = "";
   }
 }
 
-function appendBulkResult(result, fallbackName, fileName) {
-  const container = document.getElementById("bulkResults");
+/* SHOW EACH CANDIDATE RESULT */
 
-  const score = Number(result.matchScore ?? 0);
-  const decision = result.classification || classification(score);
-  const matched = normalizeSkills(result.matchedSkills ?? result.skills);
-  const missing = normalizeSkills(result.missingSkills);
+function renderBulkResult(candidate) {
+  const resultsBox = document.getElementById("bulkResults");
+  if (!resultsBox) return;
+
+  const score = Number(candidate.matchScore || 0);
+  const decision = candidate.classification || classification(score);
+
+  const matched = normalizeSkills(candidate.matchedSkills);
+  const missing = normalizeSkills(candidate.missingSkills);
 
   const card = document.createElement("article");
   card.className = "bulk-result-card";
 
-  const heading = document.createElement("div");
-  heading.className = "bulk-result-heading";
+  card.innerHTML = `
+    <div>
+      <h3>${escapeHtml(candidate.candidateName || "Candidate")}</h3>
 
-  const title = document.createElement("h3");
-  title.textContent = result.candidateName || fallbackName;
+      <div class="candidate-meta">
+        ${escapeHtml(candidate.email || "Email not found")}
+      </div>
 
-  const filename = document.createElement("span");
-  filename.className = "bulk-result-file";
-  filename.textContent = fileName;
+      <div class="candidate-meta">
+        File: ${escapeHtml(candidate.fileName || "PDF resume")}
+      </div>
 
-  heading.append(title, filename);
-  card.appendChild(heading);
+      <div class="match-score">
+        ${score}% Match
+      </div>
 
-  const grid = document.createElement("div");
-  grid.className = "bulk-result-grid";
+      <div>
+        <span class="badge ${badgeClass(decision)}">
+          ${escapeHtml(decision)}
+        </span>
 
-  addResultField(grid, "Match Score", `${score}%`);
-  addResultField(grid, "AI Decision", decision);
-  addResultField(grid, "Status", result.status || "AI_PROCESSED");
-  addResultField(grid, "Email", result.email || "Not provided");
-  addSkillField(grid, "Matched Skills", matched, "matched");
-  addSkillField(grid, "Missing Skills", missing, "missing");
+        <span class="badge ${badgeClass(decision)}">
+          ${escapeHtml(candidate.status || "AI_PROCESSED")}
+        </span>
+      </div>
 
-  card.appendChild(grid);
+      <div class="skills-result">
+        <strong>Matched Skills (${matched.length})</strong>
+        <div class="skill-list">
+          ${
+            matched.length
+              ? matched.map(skill =>
+                  `<span class="skill-tag matched">✓ ${escapeHtml(skill)}</span>`
+                ).join("")
+              : '<span class="muted">No matched skills returned by the API.</span>'
+          }
+        </div>
+      </div>
 
-  // appendChild preserves every card already displayed.
-  container.appendChild(card);
+      <div class="skills-result">
+        <strong>Missing Skills (${missing.length})</strong>
+        <div class="skill-list">
+          ${
+            missing.length
+              ? missing.map(skill =>
+                  `<span class="skill-tag missing">✗ ${escapeHtml(skill)}</span>`
+                ).join("")
+              : '<span class="muted">No missing skills returned by the API.</span>'
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="candidate-score-badge">
+      ${score}%
+    </div>
+  `;
+
+  resultsBox.prepend(card);
 }
 
-function addResultField(container, label, value) {
-  const field = document.createElement("div");
-  field.className = "bulk-result-field";
+/* FILE-BY-FILE STATUS */
 
-  const caption = document.createElement("span");
-  caption.textContent = label;
+function addFileResult(fileName, success, message) {
+  const list = document.getElementById("bulkFileResults");
+  if (!list) return;
 
-  const content = document.createElement("strong");
-  content.textContent = value;
+  const item = document.createElement("li");
 
-  field.append(caption, content);
-  container.appendChild(field);
+  item.className = success ? "" : "status-danger";
+  item.textContent =
+    `${success ? "✓" : "✗"} ${fileName} — ${message}`;
+
+  list.appendChild(item);
 }
 
-function addSkillField(container, label, skills, type) {
-  const field = document.createElement("div");
-  field.className = "bulk-result-field bulk-result-skills";
-
-  const caption = document.createElement("span");
-  caption.textContent = label;
-  field.appendChild(caption);
-
-  const list = document.createElement("div");
-  list.className = "bulk-skill-list";
-
-  if (skills.length) {
-    skills.forEach(skill => {
-      const chip = document.createElement("span");
-      chip.className = type === "matched" ? "skill-chip" : "missing-chip";
-      chip.textContent = `${type === "matched" ? "✓" : "✗"} ${skill}`;
-      list.appendChild(chip);
-    });
-  } else {
-    const empty = document.createElement("span");
-    empty.textContent = "None reported by API";
-    list.appendChild(empty);
-  }
-
-  field.appendChild(list);
-  container.appendChild(field);
-}
-
-function appendFailedResult(fileName, message) {
-  const container = document.getElementById("bulkResults");
-  const card = document.createElement("article");
-
-  card.className = "bulk-result-card bulk-failed-card";
-
-  const title = document.createElement("h3");
-  title.textContent = fileName;
-
-  const errorText = document.createElement("p");
-  errorText.textContent = `Processing failed: ${message || "Unknown error"}`;
-
-  card.append(title, errorText);
-  container.appendChild(card);
-}
-
-function classification(score) {
-  if (score >= 90) return "Excellent Match";
-  if (score >= 80) return "Strong Match";
-  if (score >= 70) return "Good Match";
-  if (score >= 60) return "Moderate Match";
-  return "Low Match";
-}
-
-function badgeClass(value) {
-  if (value.includes("Excellent")) return "excellent";
-  if (value.includes("Strong")) return "strong";
-  if (value.includes("Good")) return "good";
-  if (value.includes("Moderate")) return "moderate";
-  return "low";
-}
+/* AUDIT LOG */
 
 function addAudit(message) {
   const box = document.getElementById("auditLog");
+  if (!box) return;
+
   const entry = document.createElement("div");
 
   entry.textContent =
@@ -513,6 +750,8 @@ function addAudit(message) {
     box.lastChild.remove();
   }
 }
+
+/* HTML ESCAPING */
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, character => ({
